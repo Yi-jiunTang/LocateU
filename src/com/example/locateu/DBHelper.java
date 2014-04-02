@@ -14,11 +14,12 @@ public class DBHelper extends SQLiteOpenHelper {
 
 	final static int _DBversion = 1; // database version
 
-	final static String _DBname = "wifiOnline.db";//DBname&tableName r different from off-line
+	final static String _DBname = "wifiOnline.db";// DBname&tableName r
+													// different from off-line
 
 	final static String _TableName = "online";
 
-	//static final String COUNTER = "Counter";
+	// static final String COUNTER = "Counter";
 
 	public static final String SCAN_ID = "Scan_Id";
 
@@ -28,14 +29,29 @@ public class DBHelper extends SQLiteOpenHelper {
 
 	public static final String RSS = "RSS";
 
-	public static final String LOCATION = "Location";
-
 	public static final String WIFIRECORDS = "WifiRecords";
+	
+	public static final String LATITUDE = "Latitude";
+	
+	public static final String LONGITUDE = "Longitude";
 
 	public static final String SEQUENCE = "Sequence";
 	
-	//public static final String DEVICE_ID = "Device_Id";
+	public static final String GYRO_X="Gyro_x";
 	
+	public static final String GYRO_Y="Gyro_y";
+	
+	public static final String GYRO_Z="Gyro_z";
+	
+	public static final String STEP_FREQUENCY = "Step_Frequency";
+	
+	public static final String MOVE_LATITUDE = "Move_Latitude";
+	
+	public static final String MOVE_LONGITUDE = "Move_Longitude";
+	
+
+	// public static final String DEVICE_ID = "Device_Id";
+
 	// private SQLiteDatabase db;
 
 	public DBHelper(Context context) {
@@ -60,7 +76,7 @@ public class DBHelper extends SQLiteOpenHelper {
 
 				+ _TableName
 				+ "("
-				
+
 				+ SEQUENCE
 				+ " INTEGER NOT NULL,"
 
@@ -75,15 +91,36 @@ public class DBHelper extends SQLiteOpenHelper {
 
 				+ RSS
 				+ " TEXT NOT NULL,"
-
-				+ LOCATION
+				
+				+ LATITUDE
+				+ " TEXT NOT NULL,"
+				
+				+ LONGITUDE
+				+ " TEXT NOT NULL,"
+				
+				+ GYRO_X
+				+ " TEXT NOT NULL,"
+				
+				+ GYRO_Y
+				+ " TEXT NOT NULL,"
+				
+				+ GYRO_Z
+				+ " TEXT NOT NULL,"
+				
+				+ STEP_FREQUENCY
 				+ " INTEGER NOT NULL,"
 				
-				//+ DEVICE_ID
-				//+ " TEXT NOT NULL,"
+				+ MOVE_LATITUDE
+				+ " TEXT NOT NULL,"
+				
+				+ MOVE_LONGITUDE
+				+ " TEXT NOT NULL,"
 
-				+ String.format("PRIMARY KEY(%s,%s,%s)", SEQUENCE, SCAN_ID, MAC_ADDRESS) 
-				+ ");";
+				// + DEVICE_ID
+				// + " TEXT NOT NULL,"
+
+				+ String.format("PRIMARY KEY(%s,%s,%s)", SEQUENCE, SCAN_ID,
+						MAC_ADDRESS) + ");";
 
 		db.execSQL(SQL);
 

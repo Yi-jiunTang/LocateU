@@ -12,12 +12,7 @@
         android:layout_alignParentLeft="true"
         android:layout_alignParentTop="true"
         android:text="@string/locate" />
-    <TextView
-        android:id="@+id/locateView"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_below="@+id/map"
-        android:layout_toRightOf="@+id/locate" />
+   
 
     <fragment
         android:id="@+id/map"
@@ -26,6 +21,14 @@
         android:layout_below="@+id/locate"
         class="com.google.android.gms.maps.SupportMapFragment" />
 
-    
+    <EditText
+        android:id="@+id/initialPos"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"  
+        android:layout_toRightOf="@+id/locate"
+        android:inputType="number" >
+
+        <requestFocus />
+    </EditText>
 
 </RelativeLayout>
