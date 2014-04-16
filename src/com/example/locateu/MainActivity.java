@@ -6,9 +6,11 @@ import java.io.IOException;
 import java.security.PublicKey;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
 import javax.security.auth.PrivateCredentialPermission;
 
+import android.R.array;
 import android.R.integer;
 import android.app.Dialog;
 import android.app.ProgressDialog;
@@ -105,7 +107,7 @@ public class MainActivity extends FragmentActivity implements LocationListener,
 	private static final float NS2S = 1.0f / 1000000000.0f;
 	private final float[] deltaRotationVector = new float[4];
 	private float timestamp;
-	public int stepsCount; // distance
+	public int stepsCount, accumStep; // distance of one step is 1m
 	public double mLastX;
 	public double mLastY;
 	public double mLastZ;
@@ -113,13 +115,17 @@ public class MainActivity extends FragmentActivity implements LocationListener,
 	// boolean POS = false;
 	double lat, lng;
 	public double calLat, calLng, traceLat, traceLng;
-	public double gpslat, gpslng, azimuth;
+	public double gpslat, gpslng, azimuth, deltaZ, deltaX, deltaY;
 	public static double a = 6378137;
 	public static double b = 6356752.3142;
 	public static double f = 1 / 298.257223563; // WGS-84 ellipsiod
 	public double alpha1, sinAlpha1, cosAlpha1, tanU1, cosU1, sinU1, sigma1,
 			sinAlpha, cosSqAlpha, uSq, A, B, cos2SigmaM, sinSigma, cosSigma,
-			deltaSigma, sigmaP, sigma;
+			deltaSigma, sigmaP, sigma, ang, ang1, ang2, diffAng, singleAng;
+	boolean ANGLE = false;
+	public double angSum = 0;
+	double stepD;
+	public double gaussian, gaussian2;
 	public String _DBname = "wifiData.db";
 	private TelephonyManager telephonyManager;
 	int strength;
@@ -127,6 +133,8 @@ public class MainActivity extends FragmentActivity implements LocationListener,
 	int Sequence;
 	int level;
 	int i;
+	int state = 2;
+	int angstate = 1;
 	public static int pos;
 	String data, apMac, apId;
 	String otherwifi, iMEIString, MACString;
@@ -216,7 +224,7 @@ public class MainActivity extends FragmentActivity implements LocationListener,
 
 				wm.setWifiEnabled(true);
 			}
-
+			angSum = 0;
 			wm.startScan();
 			results = wm.getScanResults();
 			WifiInfo info = wm.getConnectionInfo();
@@ -250,22 +258,52 @@ public class MainActivity extends FragmentActivity implements LocationListener,
 			results = wm.getScanResults();
 			data = "";
 
-			for (int i = 0; i < results.size(); i++) {
+			for (int i = 0; i < results.size(); i++) { //
 
 				data += results.get(i).BSSID + "\n" + results.get(i).SSID
 						+ "\n" + results.get(i).level + "\n";
 				apMac = results.get(i).BSSID;
 				apId = results.get(i).SSID;
 				level = results.get(i).level;
-
+				Random r = new Random();
+				gaussian = r.nextGaussian();
+				stepD = (1 + (gaussian * 0.05));
+				// in the beginning, use gps position till sever send back data
 				if (UploadIntentService.wifiLat != 0) {
 					traceLat = UploadIntentService.wifiLat;
 					traceLng = UploadIntentService.wifiLng;
 				} else {
-					traceLat = gpslat;
-					traceLng = gpslng;
+					traceLat = 22.996601;
+					traceLng = 120.220578;
 				}
-				alpha1 = Math.toRadians(azimuth);
+				if (ang > 0) {
+					Random r2 = new Random();
+					gaussian2 = r2.nextGaussian();
+					azimuth += (ang + (gaussian2 * 0.5));
+					singleAng = (ang + (gaussian2 * 0.5));
+					ang = 0;
+				}
+				if (ang < 0) {
+					Random r2 = new Random();
+					gaussian2 = r2.nextGaussian();
+					azimuth += (ang + (gaussian2 * 0.5));
+					singleAng = (ang + (gaussian2 * 0.5));
+					ang = 0;
+				}
+
+				if (azimuth > 0) {
+					alpha1 = Math.toRadians(azimuth);
+				}
+				if (azimuth < 0) {
+					alpha1 = Math.toRadians(azimuth + 360);
+				}
+				if (!ANGLE) {
+					ang1 = singleAng;
+					ANGLE = true;
+				} else {
+					ang2 = singleAng;
+					diffAng = ang2 - ang1;
+				}
 				sinAlpha1 = Math.sin(alpha1);
 				cosAlpha1 = Math.cos(alpha1);
 				tanU1 = (1 - f) * Math.tan(Math.toRadians(traceLat));
@@ -278,7 +316,7 @@ public class MainActivity extends FragmentActivity implements LocationListener,
 				A = 1 + uSq / 16384
 						* (4096 + uSq * (-768 + uSq * (320 - 175 * uSq)));
 				B = uSq / 1024 * (256 + uSq * (-128 + uSq * (74 - 47 * uSq)));
-				double sigma = stepsCount * 0.2 / (b * a);
+				double sigma = accumStep * stepD / (b * a);
 				double sigmaP = 2 * Math.PI;
 				while (Math.abs(sigma - sigmaP) > 1e-12) {
 					cos2SigmaM = Math.cos(2 * sigma1 + sigma);
@@ -295,7 +333,7 @@ public class MainActivity extends FragmentActivity implements LocationListener,
 											* (-3 + 4 * sinSigma * sinSigma)
 											* (-3 + 4 * cos2SigmaM * cos2SigmaM)));
 					sigmaP = sigma;
-					sigma = stepsCount * 0.2 / (b * A) + deltaSigma;
+					sigma = accumStep * stepD / (b * A) + deltaSigma;
 				}
 				double tmp = sinU1 * sinSigma - cosU1 * cosSigma * cosAlpha1;
 				calLat = Math.atan2(sinU1 * cosSigma + cosU1 * sinSigma
@@ -313,10 +351,10 @@ public class MainActivity extends FragmentActivity implements LocationListener,
 								* (cos2SigmaM + C * cosSigma
 										* (-1 + 2 * cos2SigmaM * cos2SigmaM)));
 				calLng = (Math.toRadians(traceLng) + L + 3 * Math.PI)
-						% (2 * Math.PI) - Math.PI;
+						% (2 * Math.PI) - Math.PI; // normalise to -180...+180
 				calLat = Math.toDegrees(calLat);
 				calLng = Math.toDegrees(calLng);
-				stepsCount = 0; // initialize the distance
+
 				ContentValues values = new ContentValues();
 				values.put("Scan_Id", scanCnt);
 				values.put("Mac_Address", apMac);
@@ -325,13 +363,13 @@ public class MainActivity extends FragmentActivity implements LocationListener,
 				values.put("Sequence", Sequence);
 				values.put("Latitude", gpslat);
 				values.put("Longitude", gpslng);
-				values.put("Gyro_x", axisX);
-				values.put("Gyro_y", axisY);
+				values.put("Gyro_x", diffAng);
+				values.put("Gyro_y", stepD);
 				values.put("Gyro_z", axisZ);
-				values.put("Step_Frequency", 0.5/stepsCount);
+				values.put("Step_Frequency", stepsCount / 0.5); // IT'S PERIOD!!
 				values.put("Move_Latitude", calLat);
 				values.put("Move_Longitude", calLng);
-				
+
 				// values.put("Device_Id", MACString);//or iMeiString
 
 				db = helper.getWritableDatabase();
@@ -339,18 +377,23 @@ public class MainActivity extends FragmentActivity implements LocationListener,
 
 			}
 			db.close();
-
 			if (scanCnt < TIME) {
 				scanCnt++;
 				mHandler.postDelayed(this, 500);
-				Log.d(TAG, "scan" + scanCnt + "sequence" + Sequence + " "+pos);
-//						+ calLat + calLng + ";;" + gpslat + gpslng);
+				Log.d(TAG, "scan" + scanCnt + "sequence" + Sequence + "step:"
+						+ stepsCount + " " + stepD + ",diff:" + diffAng
+						+ "sin:" + singleAng);
+				stepsCount = 0; // initialize the steps
+				// Log.d(TAG, "delta:"+deltaX+","+deltaY+","+deltaZ);
+
+				// + calLat + calLng + ";;" + gpslat + gpslng);
 
 			}
 			if (scanCnt == TIME) {
+
 				convert();
 				try {
-					Thread.sleep(15000); // wait for loading finished
+					Thread.sleep(2000); // wait for loading finished
 					Log.d(TAG, "sleep()");
 				} catch (InterruptedException e) {
 					// TODO Auto-generated catch block
@@ -358,12 +401,15 @@ public class MainActivity extends FragmentActivity implements LocationListener,
 				}
 
 				scanCnt = 0; // after sleeping, keep scan and upload cycle
+				accumStep = 0;
+				ang = 0;
+				diffAng = 0;
+				singleAng = 0;
 				Sequence = Sequence + 1;
 
 			}
 			mHandler.post(marker2);
 		}
-
 	}
 
 	private Runnable marker2 = new Runnable() {
@@ -393,34 +439,9 @@ public class MainActivity extends FragmentActivity implements LocationListener,
 				Polyline line = map.addPolyline(polylineOptions);
 				line.setWidth(3);
 			}
-			// if (!POS) {
-			// if (UploadIntentService.wifiLat == 0.0) {
-			// POS = false;
-			// Log.d(TAG, "FROM SERVER 0");
-			// } else {
-			// Log.d(TAG, "FROM SERVER FIRST");
-			// p1 = UploadIntentService.wifiLat;
-			// q1 = UploadIntentService.wifiLng;
-			// POS = true;
-			// map.addMarker(new MarkerOptions()
-			// .position(new LatLng(p1, q1))
-			// .icon(BitmapDescriptorFactory
-			// .defaultMarker(BitmapDescriptorFactory.HUE_ROSE)));
-			// }
-			// } if (POS) {
-			// Log.d(TAG, "FROM SERVER NEW");
-			// p2 = UploadIntentService.wifiLat;
-			// q2 = UploadIntentService.wifiLng;
-			// // map.addMarker(new MarkerOptions()
-			// // .position(new LatLng(p2, q2))
-			// // .icon(BitmapDescriptorFactory
-			// // .defaultMarker(BitmapDescriptorFactory.HUE_GREEN)));
-			//
-			// map.addPolyline(new PolylineOptions()
-			// .add(new LatLng(p1, q1), new LatLng(p2, q2)).width(2)
-			// .color(Color.BLUE));
-			// }
+
 		}
+
 	};
 
 	private void convert() {
@@ -510,12 +531,12 @@ public class MainActivity extends FragmentActivity implements LocationListener,
 			// mBuilder.append(XmlBuilder.XML_OPENING);
 			mBuilder.append(openTag(DBHelper.WIFIRECORDS));
 			mBuilder.append("\n");
-			
+
 			mBuilder.append("\t" + openTag("First_RP_ID"));
 			mBuilder.append(pos);
 			mBuilder.append(endTag("First_RP_ID"));
 			mBuilder.append("\n");
-			
+
 			while (mCursor.moveToNext()) {
 				// string every column, add tags between them
 				String ColumnOne = mCursor.getString(0);
@@ -531,7 +552,6 @@ public class MainActivity extends FragmentActivity implements LocationListener,
 				String ColumnTwelve = mCursor.getString(10);
 				String ColumnThirteen = mCursor.getString(11);
 				String ColumnFourteen = mCursor.getString(12);
-				
 
 				mBuilder.append(openTag(TUPLENAME));
 				mBuilder.append("\n");
@@ -585,23 +605,21 @@ public class MainActivity extends FragmentActivity implements LocationListener,
 				mBuilder.append(ColumnEleven);
 				mBuilder.append(endTag(DBHelper.GYRO_Z));
 				mBuilder.append("\n");
-				
+
 				mBuilder.append("\t" + openTag(DBHelper.STEP_FREQUENCY));
 				mBuilder.append(ColumnTwelve);
 				mBuilder.append(endTag(DBHelper.STEP_FREQUENCY));
 				mBuilder.append("\n");
-				
+
 				mBuilder.append("\t" + openTag(DBHelper.MOVE_LATITUDE));
 				mBuilder.append(ColumnThirteen);
 				mBuilder.append(endTag(DBHelper.MOVE_LATITUDE));
 				mBuilder.append("\n");
-				
+
 				mBuilder.append("\t" + openTag(DBHelper.MOVE_LONGITUDE));
-				mBuilder.append(ColumnThirteen);
+				mBuilder.append(ColumnFourteen);
 				mBuilder.append(endTag(DBHelper.MOVE_LONGITUDE));
 				mBuilder.append("\n");
-
-				
 
 				// mBuilder.append("\t" + openTag(DBHelper.DEVICE_ID));
 				// mBuilder.append(columnSeven);
@@ -628,7 +646,7 @@ public class MainActivity extends FragmentActivity implements LocationListener,
 			}
 
 		}
-		
+
 		static String openTag(String tag) {
 			return "<" + tag + ">";
 		}
@@ -663,6 +681,7 @@ public class MainActivity extends FragmentActivity implements LocationListener,
 
 		gpslat = location.getLatitude();
 		gpslng = location.getLongitude();
+		// Log.d(TAG, gpslat + "," + gpslng);
 		LatLng latLng = new LatLng(gpslat, gpslng);
 		map.moveCamera(CameraUpdateFactory.newLatLng(latLng));
 		map.animateCamera(CameraUpdateFactory.zoomTo(18));
@@ -749,6 +768,7 @@ public class MainActivity extends FragmentActivity implements LocationListener,
 					// Log.d(TAG, "Ori" + angle[0] + "," + angle[1] + ","
 					// + angle[2]);
 				}
+
 				if (event.sensor == accSensor) {
 					// Log.d(TAG, "ACCELERATE");
 					// event object contains values of acceleration, read those
@@ -757,24 +777,50 @@ public class MainActivity extends FragmentActivity implements LocationListener,
 					double z = event.values[2];
 
 					/*
-					 * determine the orientation here
+					 * accumulate the orientation angle here
 					 */
-					if (x <= 1 & x >= 0.10) {
-						// Log.d(TAG, "0~45 left");
-						azimuth = -22.5;
+
+					if (angstate == 1 && x > 9) {
+						singleAng = 0 + (gaussian2 * 0.5);
+						angstate = 2;
 					}
-					if (x < -0.20 & x >= -1) {
-						// Log.d(TAG, "0~45 right");
-						azimuth = 22.5;
+					if (angstate == 1 && x < -9) {
+						singleAng = 0 + (gaussian2 * 0.5);
+						angstate = 3;
 					}
-					if (x < -1 & x >= -2) {
-						// Log.d(TAG, "45~90 right");
-						azimuth = 50;
+					if (angstate == 3 && x > 2) {
+						ang += 30;
+						angstate = 5;
 					}
-					if (x <= 2 & x > 1) {
-						// Log.d(TAG, "45~90 left");
-						azimuth = -50;
+					if (angstate == 2 && x < -2) {
+						ang -= 30;
+						angstate = 4;
 					}
+					if (angstate == 4 && x > -1) {
+						singleAng = 0 + (gaussian2 * 0.5);
+						angstate = 1;
+					}
+					if (angstate == 5 && x < 1) {
+						singleAng = 0 + (gaussian2 * 0.5);
+						angstate = 1;
+					}
+
+					/*
+					 * counting steps
+					 */
+					if (state == 2 && z < 5) {
+						state = 1;
+					}
+					if (state == 1 && z > 15) {
+						stepsCount = stepsCount + 1;
+						accumStep = accumStep + 1;
+						state = 2;
+
+					}
+					// Log.d(TAG, "x:" + x + "ang:" + ang + "az:" + azimuth +
+					// ","
+					// + angstate);
+
 					// Log.d(TAG, "X-axis: " + event.values[0]);
 					// alpha is calculated as t / (t + dT)
 					// with t, the low-pass filter's time-constant
@@ -794,55 +840,36 @@ public class MainActivity extends FragmentActivity implements LocationListener,
 
 					// Remove the gravity contribution with the high-pass
 					// filter.
-					x = event.values[0] - gravity[0];
-					y = event.values[1] - gravity[1];
-					z = event.values[2] - gravity[2];
-					if (!mInitialized) {
-						// sensor is used for the first time, initialize the
-						// last read
-						// values
-						mLastX = x;
-						mLastY = y;
-						mLastZ = z;
-						mInitialized = true;
-					} else {
-						// sensor is already initialized, and we have previously
-						// read
-						// values.
-						// take difference of past and current values and decide
-						// which
-						// axis acceleration was detected by comparing values
-
-						double deltaX = Math.abs(mLastX - x);
-						double deltaY = Math.abs(mLastY - y);
-						double deltaZ = Math.abs(mLastZ - z);
-
-						if (deltaX < NOISE)
-							deltaX = (float) 0.0;
-						if (deltaY < NOISE)
-							deltaY = (float) 0.0;
-						if (deltaZ < NOISE)
-							deltaZ = (float) 0.0;
-						mLastX = x;
-						mLastY = y;
-						mLastZ = z;
-						if (deltaX > deltaY) {
-							// Horizontal shake
-							// do something here if you like
-
-						} else if (deltaY > deltaX) {
-							// Vertical shake
-							// do something here if you like
-
-						} else if ((deltaZ > deltaX) && (deltaZ > deltaY)) {
-							// Z shake
-							stepsCount = stepsCount + 1;
-							if (stepsCount > 0) {
-
-								Log.d(TAG, String.valueOf(stepsCount));
-							}
-						}
-					}
+					/*
+					 * x = event.values[0] - gravity[0]; y = event.values[1] -
+					 * gravity[1]; z = event.values[2] - gravity[2]; if
+					 * (!mInitialized) { // sensor is used for the first time,
+					 * initialize the // last read // values mLastX = x; mLastY
+					 * = y; mLastZ = z; mInitialized = true; } else { // sensor
+					 * is already initialized, and we have previously // read //
+					 * values. // take difference of past and current values and
+					 * decide // which // axis acceleration was detected by
+					 * comparing values
+					 * 
+					 * deltaX = Math.abs(mLastX - x); deltaY = Math.abs(mLastY -
+					 * y); deltaZ = Math.abs(mLastZ - z);
+					 * 
+					 * if (deltaX < NOISE) deltaX = (float) 0.0; if (deltaY <
+					 * NOISE) deltaY = (float) 0.0; if (deltaZ < NOISE) deltaZ =
+					 * (float) 0.0; mLastX = x; mLastY = y; mLastZ = z; if
+					 * (deltaX > deltaY) { // Horizontal shake // do something
+					 * here if you like
+					 * 
+					 * } else if (deltaY > deltaX) { // Vertical shake // do
+					 * something here if you like
+					 * 
+					 * } else if ((deltaZ > deltaX) && (deltaZ > deltaY)) { // Z
+					 * shake stepsCount = stepsCount + 1; if (stepsCount > 1) {
+					 * 
+					 * Log.d(TAG, "steps:" + stepsCount);
+					 * 
+					 * } } }
+					 */
 				}
 			}
 		}

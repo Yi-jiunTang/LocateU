@@ -49,8 +49,11 @@ public class UploadIntentService extends IntentService {
 
 			HttpURLConnection httpUrlConnection = (HttpURLConnection) new URL(
 					MainActivity.URI_API).openConnection();
+			httpUrlConnection.setConnectTimeout(20000);
 			httpUrlConnection.setDoOutput(true);
 			httpUrlConnection.setRequestMethod("POST");
+			httpUrlConnection.setRequestProperty("Connection", "Keep-Alive");
+			httpUrlConnection.connect();
 			OutputStream os = httpUrlConnection.getOutputStream();
 			// Thread.sleep(1000);
 
@@ -88,6 +91,7 @@ public class UploadIntentService extends IntentService {
 
 					wifiLat = Double.parseDouble(wifiLatString);
 					wifiLng = Double.parseDouble(wifiLngString);
+				
 					Log.d(TAG, wifiLat + "," + wifiLng);
 
 				} catch (Exception e) {
@@ -95,7 +99,6 @@ public class UploadIntentService extends IntentService {
 				}
 
 				initializeDb();
-
 			}
 			Handler msgHandler = new Handler(getMainLooper());
 			msgHandler.post(new Runnable() {
@@ -115,7 +118,7 @@ public class UploadIntentService extends IntentService {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		} finally {
-
+			
 		}
 	}
 
