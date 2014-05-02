@@ -30,25 +30,22 @@ public class DBHelper extends SQLiteOpenHelper {
 	public static final String RSS = "RSS";
 
 	public static final String WIFIRECORDS = "WifiRecords";
-	
+
 	public static final String LATITUDE = "Latitude";
-	
+
 	public static final String LONGITUDE = "Longitude";
 
 	public static final String SEQUENCE = "Sequence";
-	
-	public static final String GYRO_X="Gyro_x";
-	
-	public static final String GYRO_Y="Gyro_y";
-	
-	public static final String GYRO_Z="Gyro_z";
-	
+
+	public static final String DIFF_ANGLE = "Diff_angle";
+
+	public static final String STEP_DISTANCE = "Step_distance";
+
 	public static final String STEP_FREQUENCY = "Step_Frequency";
-	
+
 	public static final String MOVE_LATITUDE = "Move_Latitude";
-	
+
 	public static final String MOVE_LONGITUDE = "Move_Longitude";
-	
 
 	// public static final String DEVICE_ID = "Device_Id";
 
@@ -91,37 +88,35 @@ public class DBHelper extends SQLiteOpenHelper {
 
 				+ RSS
 				+ " TEXT NOT NULL,"
-				
-				+ LATITUDE
-				+ " TEXT NOT NULL,"
-				
-				+ LONGITUDE
-				+ " TEXT NOT NULL,"
-				
-				+ GYRO_X
-				+ " TEXT NOT NULL,"
-				
-				+ GYRO_Y
-				+ " TEXT NOT NULL,"
-				
-				+ GYRO_Z
-				+ " TEXT NOT NULL,"
-				
-				+ STEP_FREQUENCY
-				+ " INTEGER NOT NULL,"
-				
-				+ MOVE_LATITUDE
-				+ " TEXT NOT NULL,"
-				
-				+ MOVE_LONGITUDE
-				+ " TEXT NOT NULL,"
 
 				// + DEVICE_ID
 				// + " TEXT NOT NULL,"
 
+				+ LATITUDE
+				+ " TEXT NOT NULL,"
+
+				+ LONGITUDE 
+				+ " TEXT NOT NULL,"
+
+				+ DIFF_ANGLE 
+				+ " TEXT NOT NULL,"
+
+				+ STEP_DISTANCE 
+				+ " TEXT NOT NULL,"
+
+				+ STEP_FREQUENCY 
+				+ " INTEGER NOT NULL,"
+
+				+ MOVE_LATITUDE 
+				+ " TEXT NOT NULL,"
+
+				+ MOVE_LONGITUDE 
+				+ " TEXT NOT NULL,"
+				
 				+ String.format("PRIMARY KEY(%s,%s,%s)", SEQUENCE, SCAN_ID,
 						MAC_ADDRESS) + ");";
 
+		
 		db.execSQL(SQL);
 
 		Log.d(TAG, "creat table succeed!");
@@ -145,7 +140,6 @@ public class DBHelper extends SQLiteOpenHelper {
 		// TODO Auto-generated method stub
 
 		db.execSQL("DROP TABLE IF EXISTS");
-
 		onCreate(db);
 
 		Log.d(TAG, "SQLiteHelper onUpgrade!");

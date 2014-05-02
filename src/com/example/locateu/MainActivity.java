@@ -3,17 +3,12 @@ package com.example.locateu;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.security.PublicKey;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
-import javax.security.auth.PrivateCredentialPermission;
-
-import android.R.array;
 import android.R.integer;
 import android.app.Dialog;
-import android.app.ProgressDialog;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.DialogInterface;
@@ -23,6 +18,10 @@ import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.graphics.Color;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
@@ -43,35 +42,15 @@ import android.widget.Toast;
 
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GooglePlayServicesUtil;
+import com.google.android.gms.drive.internal.j;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
-import com.google.android.gms.maps.GoogleMap.OnMarkerClickListener;
 import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.LatLng;
-import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.maps.model.Polyline;
 import com.google.android.gms.maps.model.PolylineOptions;
-
-import android.hardware.Sensor;
-import android.hardware.SensorEvent;
-import android.hardware.SensorEventListener;
-import android.hardware.SensorManager;
-
-import static java.lang.Double.isNaN;
-import static java.lang.Math.PI;
-import static java.lang.Math.abs;
-import static java.lang.Math.asin;
-import static java.lang.Math.atan;
-import static java.lang.Math.atan2;
-import static java.lang.Math.cos;
-import static java.lang.Math.sin;
-import static java.lang.Math.sqrt;
-import static java.lang.Math.toDegrees;
-import static java.lang.Math.toRadians;
-import static java.lang.Math.round;
-import java.text.NumberFormat;
 
 public class MainActivity extends FragmentActivity implements LocationListener,
 		OnCancelListener, SensorEventListener {
@@ -79,7 +58,7 @@ public class MainActivity extends FragmentActivity implements LocationListener,
 	private LocationManager locationManager;
 	Location location;
 	// private ProgressDialog mProgressDialog;
-	public static String URI_API = "http://140.116.179.11/wifi_project/wifi_positioning.php";
+	public static String URI_API = "http://140.116.179.11/wifi_project/wifi_positioning2.php";
 	public static final String TEMP_FILE_NAME = "WifiRecord";
 	private static final String TUPLENAME = "WifiRecord";
 	private static final String TAG = "MyActivity";
@@ -106,6 +85,9 @@ public class MainActivity extends FragmentActivity implements LocationListener,
 	private final float NOISE = (float) 1.0;
 	private static final float NS2S = 1.0f / 1000000000.0f;
 	private final float[] deltaRotationVector = new float[4];
+	float[] tempRotationCurrent = new float[9];
+	float[] deltaRotationMatrix = new float[9];
+	float[][] rotationCurrent;
 	private float timestamp;
 	public int stepsCount, accumStep; // distance of one step is 1m
 	public double mLastX;
@@ -258,7 +240,7 @@ public class MainActivity extends FragmentActivity implements LocationListener,
 			results = wm.getScanResults();
 			data = "";
 
-			for (int i = 0; i < results.size(); i++) { //
+			for (int i = 0; i <2 ; i++) { //results.size()
 
 				data += results.get(i).BSSID + "\n" + results.get(i).SSID
 						+ "\n" + results.get(i).level + "\n";
@@ -273,8 +255,8 @@ public class MainActivity extends FragmentActivity implements LocationListener,
 					traceLat = UploadIntentService.wifiLat;
 					traceLng = UploadIntentService.wifiLng;
 				} else {
-					traceLat = 22.996601;
-					traceLng = 120.220578;
+					traceLat = 22.996445;
+					traceLng = 120.221482;
 				}
 				if (ang > 0) {
 					Random r2 = new Random();
@@ -363,9 +345,8 @@ public class MainActivity extends FragmentActivity implements LocationListener,
 				values.put("Sequence", Sequence);
 				values.put("Latitude", gpslat);
 				values.put("Longitude", gpslng);
-				values.put("Gyro_x", diffAng);
-				values.put("Gyro_y", stepD);
-				values.put("Gyro_z", axisZ);
+				values.put("Diff_angle", diffAng);
+				values.put("Step_distance", stepD);
 				values.put("Step_Frequency", stepsCount / 0.5); // IT'S PERIOD!!
 				values.put("Move_Latitude", calLat);
 				values.put("Move_Longitude", calLng);
@@ -380,9 +361,10 @@ public class MainActivity extends FragmentActivity implements LocationListener,
 			if (scanCnt < TIME) {
 				scanCnt++;
 				mHandler.postDelayed(this, 500);
-				Log.d(TAG, "scan" + scanCnt + "sequence" + Sequence + "step:"
-						+ stepsCount + " " + stepD + ",diff:" + diffAng
-						+ "sin:" + singleAng);
+				Log.d(TAG, "scan" + scanCnt + "sequence" + Sequence + "ang "
+						+ azimuth);
+				// Toast.makeText(getApplicationContext(),
+				// diffAng + "," + scanCnt, Toast.LENGTH_SHORT).show();
 				stepsCount = 0; // initialize the steps
 				// Log.d(TAG, "delta:"+deltaX+","+deltaY+","+deltaZ);
 
@@ -393,7 +375,7 @@ public class MainActivity extends FragmentActivity implements LocationListener,
 
 				convert();
 				try {
-					Thread.sleep(2000); // wait for loading finished
+					Thread.sleep(10000); // wait for loading finished
 					Log.d(TAG, "sleep()");
 				} catch (InterruptedException e) {
 					// TODO Auto-generated catch block
@@ -444,19 +426,6 @@ public class MainActivity extends FragmentActivity implements LocationListener,
 
 	};
 
-	private void convert() {
-
-		Cursor cursor;
-		File file = new File(getFilesDir(), TEMP_FILE_NAME);
-		SQLiteDatabase readDatabase = helper.getReadableDatabase();
-		cursor = readDatabase.rawQuery(
-				String.format("SELECT * FROM %s", DBHelper._TableName), null);
-		XmlBuilder mXmlBuilder = new XmlBuilder(cursor, file);
-		mXmlBuilder.converToXmlFile();
-		upload();
-
-	}
-
 	/*
 	 * private void getLocationInfo(Location location) { if (location != null) {
 	 * lat = location.getLatitude(); lng = location.getLongitude(); Log.d(TAG,
@@ -480,8 +449,8 @@ public class MainActivity extends FragmentActivity implements LocationListener,
 
 	@Override
 	protected void onPause() {
-		this.locationManager.removeUpdates(this);
-		mSensorManager.unregisterListener(this);
+		// this.locationManager.removeUpdates(this);
+		// mSensorManager.unregisterListener(this);
 
 		super.onPause();
 		Log.d(TAG, "onPause");
@@ -512,6 +481,20 @@ public class MainActivity extends FragmentActivity implements LocationListener,
 	}
 
 	// build a file store cursor results
+	private void convert() {
+
+		Cursor cursor;
+		File file = new File(getFilesDir(), TEMP_FILE_NAME);
+		SQLiteDatabase readDatabase = helper.getReadableDatabase();
+		cursor = readDatabase.rawQuery(
+				String.format("SELECT * FROM %s", DBHelper._TableName), null);
+		XmlBuilder mXmlBuilder = new XmlBuilder(cursor, file);
+		mXmlBuilder.converToXmlFile();
+
+		upload();
+
+	}
+
 	static class XmlBuilder {
 
 		// private static final String XML_OPENING =
@@ -532,13 +515,9 @@ public class MainActivity extends FragmentActivity implements LocationListener,
 			mBuilder.append(openTag(DBHelper.WIFIRECORDS));
 			mBuilder.append("\n");
 
-			mBuilder.append("\t" + openTag("First_RP_ID"));
-			mBuilder.append(pos);
-			mBuilder.append(endTag("First_RP_ID"));
-			mBuilder.append("\n");
-
 			while (mCursor.moveToNext()) {
 				// string every column, add tags between them
+				
 				String ColumnOne = mCursor.getString(0);
 				String ColumnTwo = mCursor.getString(1);
 				String ColumnThree = mCursor.getString(2);
@@ -548,11 +527,48 @@ public class MainActivity extends FragmentActivity implements LocationListener,
 				String ColumnSeven = mCursor.getString(6);
 				String ColumnNine = mCursor.getString(7);
 				String ColumnTen = mCursor.getString(8);
-				String ColumnEleven = mCursor.getString(9);
-				String ColumnTwelve = mCursor.getString(10);
-				String ColumnThirteen = mCursor.getString(11);
-				String ColumnFourteen = mCursor.getString(12);
+				String ColumnTwelve = mCursor.getString(9);
+				String ColumnThirteen = mCursor.getString(10);
+				String ColumnFourteen = mCursor.getString(11);
+				
+				mBuilder.append("\t" + openTag("Dead_Reckoning"));
+				mBuilder.append("\t" + openTag(DBHelper.LATITUDE));
+				mBuilder.append(ColumnSix);
+				mBuilder.append(endTag(DBHelper.LATITUDE));
+				mBuilder.append("\n");
 
+				mBuilder.append("\t" + openTag(DBHelper.LONGITUDE));
+				mBuilder.append(ColumnSeven);
+				mBuilder.append(endTag(DBHelper.LONGITUDE));
+				mBuilder.append("\n");
+
+				mBuilder.append("\t" + openTag(DBHelper.DIFF_ANGLE));
+				mBuilder.append(ColumnNine);
+				mBuilder.append(endTag(DBHelper.DIFF_ANGLE));
+				mBuilder.append("\n");
+
+				mBuilder.append("\t" + openTag(DBHelper.STEP_DISTANCE));
+				mBuilder.append(ColumnTen);
+				mBuilder.append(endTag(DBHelper.STEP_DISTANCE));
+				mBuilder.append("\n");
+
+				mBuilder.append("\t" + openTag(DBHelper.STEP_FREQUENCY));
+				mBuilder.append(ColumnTwelve);
+				mBuilder.append(endTag(DBHelper.STEP_FREQUENCY));
+				mBuilder.append("\n");
+
+				mBuilder.append("\t" + openTag(DBHelper.MOVE_LATITUDE));
+				mBuilder.append(ColumnThirteen);
+				mBuilder.append(endTag(DBHelper.MOVE_LATITUDE));
+				mBuilder.append("\n");
+
+				mBuilder.append("\t" + openTag(DBHelper.MOVE_LONGITUDE));
+				mBuilder.append(ColumnFourteen);
+				mBuilder.append(endTag(DBHelper.MOVE_LONGITUDE));
+				mBuilder.append("\n");
+				mBuilder.append(endTag("Dead_Reckoning"));
+				mBuilder.append("\n");
+				
 				mBuilder.append(openTag(TUPLENAME));
 				mBuilder.append("\n");
 
@@ -581,45 +597,7 @@ public class MainActivity extends FragmentActivity implements LocationListener,
 				mBuilder.append(endTag(DBHelper.RSS));
 				mBuilder.append("\n");
 
-				mBuilder.append("\t" + openTag(DBHelper.LATITUDE));
-				mBuilder.append(ColumnSix);
-				mBuilder.append(endTag(DBHelper.LATITUDE));
-				mBuilder.append("\n");
-
-				mBuilder.append("\t" + openTag(DBHelper.LONGITUDE));
-				mBuilder.append(ColumnSeven);
-				mBuilder.append(endTag(DBHelper.LONGITUDE));
-				mBuilder.append("\n");
-
-				mBuilder.append("\t" + openTag(DBHelper.GYRO_X));
-				mBuilder.append(ColumnNine);
-				mBuilder.append(endTag(DBHelper.GYRO_X));
-				mBuilder.append("\n");
-
-				mBuilder.append("\t" + openTag(DBHelper.GYRO_Y));
-				mBuilder.append(ColumnTen);
-				mBuilder.append(endTag(DBHelper.GYRO_Y));
-				mBuilder.append("\n");
-
-				mBuilder.append("\t" + openTag(DBHelper.GYRO_Z));
-				mBuilder.append(ColumnEleven);
-				mBuilder.append(endTag(DBHelper.GYRO_Z));
-				mBuilder.append("\n");
-
-				mBuilder.append("\t" + openTag(DBHelper.STEP_FREQUENCY));
-				mBuilder.append(ColumnTwelve);
-				mBuilder.append(endTag(DBHelper.STEP_FREQUENCY));
-				mBuilder.append("\n");
-
-				mBuilder.append("\t" + openTag(DBHelper.MOVE_LATITUDE));
-				mBuilder.append(ColumnThirteen);
-				mBuilder.append(endTag(DBHelper.MOVE_LATITUDE));
-				mBuilder.append("\n");
-
-				mBuilder.append("\t" + openTag(DBHelper.MOVE_LONGITUDE));
-				mBuilder.append(ColumnFourteen);
-				mBuilder.append(endTag(DBHelper.MOVE_LONGITUDE));
-				mBuilder.append("\n");
+				
 
 				// mBuilder.append("\t" + openTag(DBHelper.DEVICE_ID));
 				// mBuilder.append(columnSeven);
@@ -730,15 +708,16 @@ public class MainActivity extends FragmentActivity implements LocationListener,
 								+ axisY * axisY + axisZ * axisZ);
 
 						float EPSILON = 1;
-						// Normalize the rotation vector if it's big enough to
-						// get the axis
-						// (that is, EPSILON should represent your maximum
-						// allowable margin of error)
 						/*
-						 * if (omegaMagnitude > EPSILON) { axisX /=
-						 * omegaMagnitude; axisY /= omegaMagnitude; axisZ /=
-						 * omegaMagnitude; }
+						 * Normalize the rotation vector if it's big enough to
+						 * get the axis (that is, EPSILON should represent your
+						 * maximum allowable margin of error)
 						 */
+						if (omegaMagnitude > EPSILON) {
+							axisX /= omegaMagnitude;
+							axisY /= omegaMagnitude;
+							axisZ /= omegaMagnitude;
+						}
 
 						// Integrate around this axis with the angular speed by
 						// the timestep
@@ -748,25 +727,43 @@ public class MainActivity extends FragmentActivity implements LocationListener,
 						// delta rotation
 						// into a quaternion before turning it into the rotation
 						// matrix.
-						float thetaOverTwo = omegaMagnitude * dT / 2.0f;
-						float sinThetaOverTwo = (float) Math.sin(thetaOverTwo);
-						float cosThetaOverTwo = (float) Math.cos(thetaOverTwo);
-						deltaRotationVector[0] = sinThetaOverTwo * axisX;
-						deltaRotationVector[1] = sinThetaOverTwo * axisY;
-						deltaRotationVector[2] = sinThetaOverTwo * axisZ;
-						deltaRotationVector[3] = cosThetaOverTwo;
+						// float thetaOverTwo = omegaMagnitude * dT / 2.0f;
+						// float sinThetaOverTwo = (float)
+						// Math.sin(thetaOverTwo);
+						// float cosThetaOverTwo = (float)
+						// Math.cos(thetaOverTwo);
+						// deltaRotationVector[0] = sinThetaOverTwo * axisX;
+						// deltaRotationVector[1] = sinThetaOverTwo * axisY;
+						// deltaRotationVector[2] = sinThetaOverTwo * axisZ;
+						// deltaRotationVector[3] = cosThetaOverTwo;
 
 					}
 					timestamp = event.timestamp;
-					float[] deltaRotationMatrix = new float[9];
+					/*
+					 * float test = 0; for (int sec = 0; sec < (0.5 /
+					 * timestamp); sec++) { test += deltaRotationVector[0]; }
+					 */
+					// Log.d(TAG, "x:" + deltaRotationVector[0] + " y:" +
+					// deltaRotationVector[1] + " z:" + deltaRotationVector[2]);
 					SensorManager.getRotationMatrixFromVector(
 							deltaRotationMatrix, deltaRotationVector);
 
-					// Log.d(TAG, "gyro:" + axisX + " , " + axisY + " , " +
-					// axisZ);
+					// User code should concatenate the delta rotation we
+					// computed with the current rotation
+					// in order to get the updated rotation.
 
-					// Log.d(TAG, "Ori" + angle[0] + "," + angle[1] + ","
-					// + angle[2]);
+					/*
+					 * float[][] rotationCurrent = new
+					 * float[tempRotationCurrent.
+					 * length][tempRotationCurrent.length];
+					 * 
+					 * for (int i = 0; i < tempRotationCurrent.length; i++) {
+					 * for (int j = 0; j < tempRotationCurrent.length; j++) {
+					 * rotationCurrent[i][j] = tempRotationCurrent[i]
+					 * deltaRotationMatrix[j]; // Log.d(TAG, " " +
+					 * rotationCurrent); } }
+					 */
+
 				}
 
 				if (event.sensor == accSensor) {
@@ -826,18 +823,18 @@ public class MainActivity extends FragmentActivity implements LocationListener,
 					// with t, the low-pass filter's time-constant
 					// and dT, the event delivery rate
 
-					final double alpha = 0.8; // constant for our filter below
-
-					double[] gravity = { 0, 0, 0 };
+					// final double alpha = 0.8; // constant for our filter
+					// below
+					//
+					// double[] gravity = { 0, 0, 0 };
 
 					// Isolate the force of gravity with the low-pass filter.
-					gravity[0] = alpha * gravity[0] + (1 - alpha)
-							* event.values[0];
-					gravity[1] = alpha * gravity[1] + (1 - alpha)
-							* event.values[1];
-					gravity[2] = alpha * gravity[2] + (1 - alpha)
-							* event.values[2];
-
+					/*
+					 * gravity[0] = alpha * gravity[0] + (1 - alpha)
+					 * event.values[0]; gravity[1] = alpha * gravity[1] + (1 -
+					 * alpha) event.values[1]; gravity[2] = alpha * gravity[2] +
+					 * (1 - alpha) event.values[2];
+					 */
 					// Remove the gravity contribution with the high-pass
 					// filter.
 					/*
